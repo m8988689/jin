@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電信維修回報專用</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .input-group select,
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #28a745;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+        }
+        .output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #444;
+            border-radius: 5px;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>電信維修回報專用</h1>
+        <div class="input-group">
+            <label for="type">類型</label>
+            <select id="type">
+                <option value="新安裝">新安裝</option>
+                <option value="維運換機">維運換機</option>
+                <option value="回收">回收</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label for="date">日期</label>
+            <input type="date" id="date">
+        </div>
+        <div class="input-group">
+            <label for="time">至現場時間</label>
+            <input type="time" id="time">
+        </div>
+        <div class="input-group">
+            <label for="location">現場地點（透天/樓層）</label>
+            <input type="text" id="location">
+        </div>
+        <div class="input-group">
+            <label for="antenna">天線位置（樓層/窗戶）</label>
+            <input type="text" id="antenna">
+        </div>
+        <div class="input-group">
+            <label for="hb">HB位置（樓層/房間）</label>
+            <input type="text" id="hb">
+        </div>
+        <div class="input-group">
+            <label for="signal3g">3G 信號</label>
+            <input type="text" id="signal3g">
+        </div>
+        <div class="input-group">
+            <label for="signal4g">4G 信號</label>
+            <input type="text" id="signal4g">
+        </div>
+        <div class="input-group">
+            <label for="speed">網速</label>
+            <input type="text" id="speed">
+        </div>
+        <div class="input-group">
+            <label for="dismantle">拆回</label>
+            <input type="text" id="dismantle">
+            <button onclick="startCamera('dismantle')">使用鏡頭識別</button>
+        </div>
+        <div class="input-group">
+            <label for="install">安裝</label>
+            <input type="text" id="install">
+            <button onclick="startCamera('install')">使用鏡頭識別</button>
+        </div>
+        <button onclick="generateReport()">生成回報內容</button>
+        <div class="output" id="output"></div>
+        <video id="video" autoplay></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('date').value = today;
+        });
+
+        function generateReport() {
+            const type = document.getElementById('type').value;
+            const date = document.getElementById('date').value || new Date().toISOString().split('T')[0];
+            const time = document.getElementById('time').value;
+            const location = document.getElementById('location').value;
+            const antenna = document.getElementById('antenna').value;
+            const hb = document.getElementById('hb').value;
+            const signal3g = document.getElementById('signal3g').value;
+            const signal4g = document.getElementById('signal4g').value;
+            const speed = document.getElementById('speed').value;
+            const dismantle = document.getElementById('dismantle').value;
+            const install = document.getElementById('install').value;
+
+            let report = `${type}\n${date} ${time} 至現場`;
+
+            if (location) report += `（${location}）`;
+            if (antenna) report += ` 天線裝於${antenna}`;
+            if (hb) report += `、HB裝於${hb}`;
+            if (signal3g) report += `\n3G: ${signal3g}`;
+            if (signal4g) report += `。4G: ${signal4g}`;
+            if (speed) report += `\n網速: ${speed}m`;
+            report += `，新安裝、外部訊號不佳，經HB安裝完成後，測試語音、上網、通話皆不佳，用戶接受同意留用，天線設備位置和線的路徑經由屋主同意後施工，`;
+            if (dismantle) report += `\n拆回: ${dismantle}`;
+            if (install) report += `\n安裝: ${install}`;
+
+            document.getElementById('output').textContent = report;
+        }
+
+        let currentField = '';
+
+        function startCamera(field) {
+            currentField = field;
+            const video = document.getElementById('video');
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                })
+                .catch(err => {
+                    console.error("Error accessing camera: ", err);
+                });
+
+            video.addEventListener('click', captureImage);
+        }
+
+        function captureImage() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            video.pause();
+            video.srcObject.getTracks().forEach(track => track.stop());
+            recognizeText();
+        }
+
+        function recognizeText() {
+            const canvas = document.getElementById('canvas');
+            Tesseract.recognize(canvas, 'eng', {
+                logger: m => console.log(m)
+            }).then(({ data: { text } }) => {
+                document.getElementById(currentField).value = text.trim();
+            });
+        }
+    </script>
+</body>
+</html>
